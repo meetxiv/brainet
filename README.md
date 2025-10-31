@@ -56,27 +56,32 @@ Now when you come back, just run `brainet history` and instantly remember everyt
 ### Installation
 
 ```bash
-pip install brainet
+# 1. Install brainet
+pip install brainet --user
+
+# 2. Add to PATH permanently
+echo 'export PATH="$HOME/Library/Python/3.9/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ### Setup
 
 ```bash
-# 1. Get a free API key from Groq (takes 30 seconds)
-#    https://console.groq.com/keys
+# 1. Check it works
+brainet --version
 
-# 2. Set your API key
-export GROQ_API_KEY="your_key_here"
+# 2. Get free API key from https://console.groq.com/keys
 
-# 3. Start tracking in your project
-cd your-project/
+# 3. Set it permanently
+echo 'export GROQ_API_KEY="gsk_your_key_here"' >> ~/.zshrc
+source ~/.zshrc
+
+# 4. Start using brainet in any git project!
+cd your-project
+
 brainet start
-
-# 4. Work on your code...
-# (make changes, commit, etc.)
-
-# 5. Capture your session
-brainet capture
+# ... make some changes ...
+brainet capture --tag feature -m "Added user authentication"
 ```
 
 That's it! Brainet is now tracking your development context.
