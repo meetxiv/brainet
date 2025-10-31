@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brainet"
+version = "0.1.2"
+description = "AI-powered development context tracker - never lose your train of thought"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Meet Joshi", email = "meet@brainet.dev"}
+]
+keywords = ["ai", "development", "context", "git", "productivity", "claude", "groq", "llm", "developer-tools", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "anthropic>=0.3.0",
+    "gitpython>=3.1.0",
+    "groq>=0.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/meetjoshi/brainet"
+Documentation = "https://github.com/meetjoshi/brainet#readme"
+Repository = "https://github.com/meetjoshi/brainet"
+"Bug Reports" = "https://github.com/meetjoshi/brainet/issues"
+
+[project.scripts]
+brainet = "brainet.cli:main"
+
+[tool.setuptools]
+packages = ["brainet"]
+
+[tool.setuptools.package-data]
+brainet = ["py.typed"]

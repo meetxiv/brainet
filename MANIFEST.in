@@ -1,0 +1,19 @@
+include README.md
+include LICENSE
+include requirements.txt
+include .env.example
+include pyproject.toml
+
+recursive-include brainet *.py
+recursive-exclude brainet _session.json
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+
+# Exclude test files and dev docs
+exclude README_OLD.md
+exclude SESSION_SUMMARY.md
+exclude MULTI_PROJECT_TEST.md
+exclude test_*.py
+exclude .brainet
