@@ -136,13 +136,13 @@ class GitExtractor:
             
             return commits
     
-    def get_file_diff(self, filepath: str, include_last_commit: bool = True) -> Optional[str]:
+    def get_file_diff(self, filepath: str, staged_only: bool = False) -> Optional[str]:
         """
         Get the diff for a specific modified file.
         
         Args:
             filepath: Relative path to the file
-            include_last_commit: If True and no uncommitted changes, get diff from last commit
+            staged_only: If True, only return diff for staged files (git diff --cached)
             
         Returns:
             Diff string or None if file not modified
@@ -157,30 +157,16 @@ class GitExtractor:
                 # Try STAGED changes first (files that were git added)
                 diff = self.repo.git.diff('--cached', 'HEAD', filepath)
                 
-                # If no staged changes, try UNSTAGED changes (modified but not added)
-                if not diff:
+                # If no staged changes and not staged_only, try UNSTAGED changes
+                if not diff and not staged_only:
                     diff = self.repo.git.diff('HEAD', filepath)
-                
-                if not diff and include_last_commit:
-                    # No uncommitted changes, try getting diff from LAST COMMIT
-                    try:
-                        diff = self.repo.git.diff('HEAD~1', 'HEAD', filepath)
-                    except Exception:
-                        pass  # No previous commit or error
             else:
-                # No commits yet - just get the diff without HEAD reference
-                diff = self.repo.git.diff(filepath)
-                
-                # If file is staged, get the full content as a new file
-                if not diff and filepath in [item.a_path for item in self.repo.index.diff("HEAD", create_patch=True)] if has_commits else []:
-                    full_path = self.repo_path / filepath
-                    if full_path.exists():
-                        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                        return f"+++ NEW FILE (staged) +++\n{content[:2000]}"
+                # No commits yet - get diff for new repo
+                if not staged_only:
+                    diff = self.repo.git.diff(filepath)
             
-            if not diff:
-                # File might be untracked, try showing full content
+            if not diff and not staged_only:
+                # File might be untracked, show full content
                 full_path = self.repo_path / filepath
                 if full_path.exists() and filepath in self.repo.untracked_files:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -209,6 +195,48 @@ class GitExtractor:
         except Exception:
             pass
         return staged
+    
+    def get_staged_files_with_diffs(self) -> List[Dict[str, str]]:
+        """
+        Get ONLY staged files with their diffs - for current session analysis.
+        This prevents historical noise and ensures AI only sees current work.
+        
+        Returns:
+            List of dicts with 'path', 'status', and 'diff'
+        """
+        staged_files = []
+        try:
+            # Get staged files
+            diff_index = self.repo.index.diff('HEAD')
+            for diff in diff_index:
+                file_path = diff.a_path or diff.b_path
+                
+                # Get diff for this staged file only
+                diff_content = self.repo.git.diff('--cached', 'HEAD', file_path)
+                
+                staged_files.append({
+                    'path': file_path,
+                    'status': self._get_change_type(diff),
+                    'diff': diff_content[:5000] if diff_content else ''  # Limit size
+                })
+        except Exception as e:
+            # No HEAD yet (empty repo) - try getting all staged files
+            try:
+                for item in self.repo.index.entries:
+                    file_path = item[0]
+                    full_path = self.repo_path / file_path
+                    if full_path.exists():
+                        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        staged_files.append({
+                            'path': file_path,
+                            'status': 'added',
+                            'diff': f"+++ NEW FILE +++\n{content[:2000]}"
+                        })
+            except Exception:
+                pass
+        
+        return staged_files
     
     def get_uncommitted_changes(self) -> List[Dict[str, str]]:
         """

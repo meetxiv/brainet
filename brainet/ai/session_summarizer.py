@@ -42,13 +42,15 @@ class SessionSummarizer:
         context = self._build_context(capsule_data)
         
         files = capsule_data.get("file_changes", [])
-        commits = capsule_data.get("recent_commits", [])
         
-        if not files and not commits:
+        if not files:
             return "No code changes detected. Session captured for tracking."
         
-        # Prompt engineering: Focus AI on current work, ignore historical noise
+        # Prompt engineering: Focus AI on CURRENT session only, no historical context
         prompt = f"""Summarize the changes in ONE concise sentence.
+
+CRITICAL: Only describe changes shown in the "Code changes:" section below. 
+DO NOT reference commit history, previous work, or anything not in the diffs.
 
 {context}
 
@@ -58,17 +60,19 @@ Read the changes:
 
 Rules:
 - ONE sentence maximum (or two very short sentences)
-- Be specific about what code changed
+- Be specific about what code changed in THIS session only
 - Don't confuse comments with code
 - Mention function names if functions were added/removed
 - State facts only, no fluff
+- NEVER mention "refactored", "previously added", or historical work
 
 Examples:
 - "Changed print statement from 'Hello Brainet' to 'Hellloo Brainnnet2.0' and added TODO."
 - "Added lcm function to math_utils.py."
 - "Modified database connection string."
+- "Added calculate_vip_cashback() method with tier-based cashback rates."
 
-Your turn - ONE sentence:"""
+Your turn - ONE sentence describing ONLY the current session changes:"""
 
         response = await self.ai_client.generate(prompt=prompt, max_tokens=200)
         summary = response.strip()
@@ -83,7 +87,7 @@ Your turn - ONE sentence:"""
         
         git = capsule_data.get("git_info", {})
         files = capsule_data.get("file_changes", [])
-        commits = capsule_data.get("recent_commits", [])
+        # REMOVED: commits = capsule_data.get("recent_commits", [])  # Ignore commit history
         todos = capsule_data.get("todos", [])
         
         # Noise filter: exclude non-code files
@@ -111,10 +115,11 @@ Your turn - ONE sentence:"""
         if git:
             parts.append(f"Branch: {git.get('current_branch', 'unknown')}")
         
-        if commits:
-            parts.append(f"\nRecent commits ({len(commits)}):")
-            for commit in commits[:3]:
-                parts.append(f"  • {commit.get('hash', 'unknown')}: {commit.get('message', 'No message')}")
+        # REMOVED: Recent commits section - we only care about current session diffs
+        # if commits:
+        #     parts.append(f"\nRecent commits ({len(commits)}):")
+        #     for commit in commits[:3]:
+        #         parts.append(f"  • {commit.get('hash', 'unknown')}: {commit.get('message', 'No message')}")
         
         if files_to_analyze:
             parts.append(f"\nModified files:")
@@ -245,12 +250,12 @@ Return ONLY a list with "-" prefix, like:
         if not self.ai_available:
             return self._fallback_why(capsule_data)
         
-        # Check if there are file changes OR recent commits OR file contents
+        # Check if there are file changes OR file contents
         files = capsule_data.get("file_changes", [])
-        commits = capsule_data.get("recent_commits", [])
+        # REMOVED: commits check - we don't use commit history anymore
         file_contents = capsule_data.get("file_contents", {})
         
-        if not files and not commits and not file_contents:
+        if not files and not file_contents:
             return "No code changes in this session - just tracking activity."
         
         try:

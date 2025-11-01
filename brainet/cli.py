@@ -1229,7 +1229,15 @@ async def _ask_async(query):
         console.print("[yellow]No active tracking session[/yellow]")
         return
 
-    capsule = context.capture_context()
+    # Try to get the most recent saved capsule for better context
+    latest_capsule = context.get_latest_context()
+    
+    # If no saved capsule, capture current state
+    if not latest_capsule:
+        capsule = context.capture_context()
+    else:
+        capsule = latest_capsule
+    
     query_text = " ".join(query)
     
     file_contents = {}
@@ -1251,23 +1259,11 @@ async def _ask_async(query):
                     file_contents[filename] = content
                 except Exception:
                     pass
-    
-    # Build structured context for AI comprehension
-    context_text = (
-        f"Project: {capsule.project.name}\n"
-        f"Branch: {capsule.project.git_branch}\n\n"
-        "Modified Files:\n"
-        + "\n".join(f"• {f.path}" for f in capsule.context.modified_files)
-        + "\n\nTODOs:\n"
-        + "\n".join(f"• {todo.file}: {todo.text}" for todo in capsule.context.todos)
-        + "\n\nRecent Commits:\n"
-        + "\n".join(f"• {c.message}" for c in capsule.context.recent_commits)
-    )
 
     from .ai.session_summarizer import SessionSummarizer
     summarizer = SessionSummarizer(use_ai=True)
     
-    # Transform capsule to dict format with full diff context
+    # Transform capsule to dict format with ONLY diff context (NO commit history)
     capsule_data = {
         "git_info": {
             "current_branch": capsule.project.git_branch or "unknown",
@@ -1284,10 +1280,7 @@ async def _ask_async(query):
             {"file": t.file, "line": t.line, "text": t.text}
             for t in capsule.context.todos
         ],
-        "recent_commits": [
-            {"message": c.message, "hash": c.hash}
-            for c in capsule.context.recent_commits[:5]
-        ],
+        # REMOVED: recent_commits - AI should only see diff context
         "file_contents": file_contents  # Add file contents if mentioned
     }
     
