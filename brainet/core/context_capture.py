@@ -73,32 +73,32 @@ class ContextCapture:
             git_repo=self.git_extractor.repo_name if self.git_extractor else None
         )
         
-        # Extract file changes with diffs (LIMIT for speed)
+        # Extract file changes with diffs (STAGED ONLY for current session)
         from ..core.config import MAX_FILES_TO_ANALYZE
-        modified_files = self.git_extractor.get_modified_files() if self.git_extractor else []
         
-        # If NO uncommitted changes, get files from LAST COMMIT
-        if not modified_files and self.git_extractor:
-            last_commit_changes = self.git_extractor.get_last_commit_changes()
-            if last_commit_changes:
-                # Convert last commit changes to ModifiedFile format
-                from ..storage.models.capsule import ModifiedFile
-                for change in last_commit_changes:
-                    modified_files.append(ModifiedFile(
-                        path=change['path'],
-                        status=change['status'],
-                        last_modified=datetime.now()  # Approximate
-                    ))
-        
-        # LIMIT: Only analyze most recent files for speed
-        modified_files = modified_files[:MAX_FILES_TO_ANALYZE]
+        # Get ONLY staged files to avoid historical noise
+        if self.git_extractor:
+            staged_files_data = self.git_extractor.get_staged_files_with_diffs()
+            
+            # Convert to ModifiedFile format
+            from ..storage.models.capsule import ModifiedFile
+            modified_files = []
+            for staged in staged_files_data[:MAX_FILES_TO_ANALYZE]:
+                modified_files.append(ModifiedFile(
+                    path=staged['path'],
+                    status=staged['status'],
+                    last_modified=datetime.now()
+                ))
+        else:
+            modified_files = []
         
         file_diffs = []
         incomplete_functions = []
         
-        for mf in modified_files:
-            # Get file diff (now includes last commit fallback)
-            diff_content = self.git_extractor.get_file_diff(mf.path, include_last_commit=True) if self.git_extractor else ""
+        for i, mf in enumerate(modified_files):
+            # Get diff from staged_files_data (already fetched)
+            diff_content = staged_files_data[i].get('diff', '') if self.git_extractor and i < len(staged_files_data) else ""
+            
             if diff_content is None:
                 diff_content = ""
             
