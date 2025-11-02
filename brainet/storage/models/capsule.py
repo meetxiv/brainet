@@ -6,7 +6,7 @@ context capsules, which store developer context information.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, field_validator, ConfigDict
@@ -120,6 +120,12 @@ class ContextData(BaseModel):
     incomplete_work: List[CodeSnippet] = Field(default_factory=list, description="Unfinished code snippets")
     ai_summary: Optional[str] = Field(None, description="AI-generated session summary")
     next_steps: Optional[str] = Field(None, description="AI-suggested next steps")
+    
+    # 5-Source Architecture Fields (v0.2.0+)
+    full_file_contents: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Complete file contents from File Scanner")
+    ast_analysis: Optional[Dict[str, Any]] = Field(default_factory=dict, description="AST structure analysis")
+    semantic_results: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="Semantic search results")
+    project_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Project context metadata")
 
 class Capsule(BaseModel):
     """The complete context capsule."""

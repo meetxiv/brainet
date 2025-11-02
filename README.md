@@ -12,6 +12,29 @@ Brainet is an AI-powered development context tracker that automatically captures
 
 ---
 
+## 🚀 What's New in v0.2.0
+
+**Major Architecture Overhaul - 5-Source Intelligence System:**
+
+- **🔍 SOURCE 1 - Git Diffs**: Smart chunking with AST-based function extraction
+- **📄 SOURCE 2 - Full Files**: Complete code context for accurate answers
+- **🌲 SOURCE 3 - AST Analysis**: Deep code structure understanding (classes, methods, imports)
+- **🎯 SOURCE 4 - Semantic Search**: Proactive code discovery related to your queries
+- **📦 SOURCE 5 - Project Metadata**: Dependencies, file types, and project structure
+
+**Critical Bugs Fixed:**
+- ✅ First captures no longer show "removed" instead of "added" (fresh repo support)
+- ✅ Ask command now provides specific, detailed answers with line numbers
+- ✅ Proper diff counting (additions/deletions) in all scenarios
+
+**New Features:**
+- 🎨 Capsule indexing (#01, #02, #03 format)
+- 👁️ `brainet preview <index>` - View any historical capsule
+- 💬 Dramatically improved AI responses - specific method listings, accurate context
+- 🚫 No more internal mechanism exposure in answers
+
+---
+
 ## 🤔 The Problem
 
 You're deep in the zone, building a feature. Then...
@@ -33,17 +56,17 @@ $ brainet capture
 
 📸 Context Captured
 ────────────────────────────────────────────────────────────────
-Implemented VIP tier system with 5 levels (Bronze to Diamond), 
-automatic tier upgrades based on wagering, and bonus multipliers 
-from 1.0x to 1.25x. Added daily deposit and loss limits for 
-responsible gambling features.
+Added a Character class with methods for combat (attack, 
+take_damage, heal), progression (gain_experience, level_up), 
+and status checking (is_alive). Also added Inventory class 
+with item management.
 
 📊 Stats:
-   • 3 files modified
-   • 147 lines added
-   • 5 TODOs found
+   • 1 files modified
+   • 67 lines added
+   • 3 TODOs found
 
-✓ Capsule saved: 2025-10-31 16:45:23
+✓ Capsule saved: 2025-11-02 15:45:53
 ────────────────────────────────────────────────────────────────
 ```
 
@@ -96,16 +119,21 @@ Brainet uses Claude Sonnet 3.5 (via Groq) to understand your changes and generat
 - Bug fixes vs new functionality  
 - Breaking changes vs safe updates
 
-### 🔍 Natural Language Querying
-Ask questions about your work in plain English:
+### 🔍 Natural Language Querying (Powered by 5 Sources)
+Ask questions about your work in plain English - now with comprehensive context:
 
 ```bash
-$ brainet ask "what VIP tiers did I create?"
+$ brainet ask "what methods does the Character class have?"
 
-You created 5 VIP tiers: Bronze, Silver, Gold, Platinum, and 
-Diamond. Each tier has different bonus multipliers ranging from 
-1.0x to 1.25x based on wagering volume...
+You have a Character class with these methods: __init__ 
+(lines 4-10), take_damage (lines 12-15), heal (lines 17-20), 
+is_alive (lines 22-23), attack (lines 25-27), gain_experience 
+(lines 29-32), and level_up (lines 34-39). The TODOs include 
+adding a magic system with spells, implementing quest tracking, 
+and adding save/load game functionality.
 ```
+
+**v0.2.0 Intelligence:** Brainet now searches through full file contents, AST structure, and semantically related code to give you accurate, detailed answers with line numbers.
 
 ### 🏢 Multi-Project Support
 Working on multiple projects? Brainet handles it seamlessly:
@@ -169,8 +197,10 @@ $ brainet stats
 |---------|-------------|
 | `brainet start` | Initialize tracking in current project |
 | `brainet capture` | Save current session with AI summary |
-| `brainet history` | View all captured sessions |
-| `brainet ask "question"` | Query your work with AI |
+| `brainet history` | View all captured sessions with #01, #02 indexing |
+| `brainet preview` | Preview what will be captured next |
+| `brainet preview <N>` | View historical capsule #N |
+| `brainet ask "question"` | Query your work with AI (v0.2.0: 5-source intelligence) |
 | `brainet search "keyword"` | Search across sessions |
 | `brainet workspaces` | List all tracked projects |
 | `brainet stats` | View development analytics |

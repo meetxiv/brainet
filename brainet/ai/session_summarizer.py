@@ -247,37 +247,169 @@ Return ONLY a list with "-" prefix, like:
         return steps[:4] if steps else ["Continue development"]
     
     async def explain_why(self, capsule_data: Dict, question: str = "") -> str:
+        """Generate explanation using ALL 5 SOURCES for comprehensive understanding.
+        
+        Leverages:
+        1. Git diffs (file_changes) - What changed
+        2. Full file contents (full_file_contents) - Complete code context
+        3. AST analysis (ast_analysis) - Code structure
+        4. Semantic search results (semantic_results) - Related code
+        5. Project metadata (project_metadata) - Dependencies & structure
+        """
         if not self.ai_available:
             return self._fallback_why(capsule_data)
         
-        # Check if there are file changes OR file contents
+        # Check if there's any data from the 5 sources
         files = capsule_data.get("file_changes", [])
-        # REMOVED: commits check - we don't use commit history anymore
-        file_contents = capsule_data.get("file_contents", {})
+        full_file_contents = capsule_data.get("full_file_contents", {})
+        ast_analysis = capsule_data.get("ast_analysis", {})
+        semantic_results = capsule_data.get("semantic_results", [])
+        project_metadata = capsule_data.get("project_metadata", {})
         
-        if not files and not file_contents:
+        # Legacy support for old file_contents field
+        legacy_file_contents = capsule_data.get("file_contents", {})
+        
+        if not files and not full_file_contents and not legacy_file_contents:
             return "No code changes in this session - just tracking activity."
         
         try:
+            # Build base context from git diffs
             context = self._build_context(capsule_data)
             
-            # Add file contents to context if provided
-            if file_contents:
-                context += "\n\nFile Contents (user asked about these files):"
-                for filename, content in file_contents.items():
+            # ============================================================
+            # SOURCE 2: FULL FILE CONTENTS - Complete code understanding
+            # ============================================================
+            if full_file_contents:
+                context += "\n\n=== FULL FILE CONTENTS (Complete Code Context) ==="
+                for filepath, file_data in list(full_file_contents.items())[:3]:  # Limit to 3 files
+                    context += f"\n\n📄 {filepath} ({file_data.get('lines', 0)} lines, {file_data.get('language', 'unknown')} file):"
+                    content = file_data.get('content', '')
+                    # Show first 100 lines to keep context manageable
+                    lines = content.split('\n')[:100]
+                    context += f"\n```\n" + '\n'.join(lines) + "\n```"
+                    total_lines = len(content.split('\n'))
+                    if total_lines > 100:
+                        remaining_lines = total_lines - 100
+                        context += f"\n... ({remaining_lines} more lines not shown)"
+            
+            # Legacy file_contents support (from ask command's manual loading)
+            if legacy_file_contents and not full_file_contents:
+                context += "\n\n=== FILE CONTENTS (User-requested files) ==="
+                for filename, content in legacy_file_contents.items():
                     context += f"\n\n📄 {filename}:\n```\n{content}\n```"
+            
+            # ============================================================
+            # SOURCE 3: AST ANALYSIS - Code structure understanding
+            # ============================================================
+            if ast_analysis:
+                context += "\n\n=== CODE STRUCTURE (AST Analysis) ==="
+                for filepath, ast_data in list(ast_analysis.items())[:3]:  # Limit to 3 files
+                    context += f"\n\n📄 {filepath}:"
+                    
+                    functions = ast_data.get('functions', [])
+                    if functions:
+                        context += f"\n  Functions ({len(functions)}):"
+                        for func in functions[:10]:  # Top 10 functions
+                            decorators = func.get('decorators', [])
+                            dec_str = f"@{', @'.join(decorators)}" if decorators else ""
+                            async_str = "async " if func.get('is_async') else ""
+                            context += f"\n    - {dec_str}{async_str}def {func['name']}() (lines {func['line_start']}-{func['line_end']})"
+                    
+                    classes = ast_data.get('classes', [])
+                    if classes:
+                        context += f"\n  Classes ({len(classes)}):"
+                        for cls in classes[:5]:  # Top 5 classes
+                            context += f"\n    - class {cls['name']} (lines {cls['line_start']}-{cls['line_end']})"
+                            methods = cls.get('methods', [])
+                            if methods:
+                                for method in methods[:5]:  # Top 5 methods per class
+                                    context += f"\n      - {method['name']}() (lines {method['line_start']}-{method['line_end']})"
+                    
+                    imports = ast_data.get('imports', [])
+                    if imports:
+                        context += f"\n  Imports: {', '.join(imports[:10])}"
+            
+            # ============================================================
+            # SOURCE 4: SEMANTIC SEARCH - Related code discovery
+            # ============================================================
+            if semantic_results:
+                context += "\n\n=== RELATED CODE (Semantic Search Results) ==="
+                context += f"\nFound {len(semantic_results)} related entities in the codebase:"
+                for result in semantic_results[:5]:  # Top 5 results
+                    entity_type = result.get('entity_type', 'unknown')
+                    entity_name = result.get('entity_name', 'unknown')
+                    file_path = result.get('file_path', 'unknown')
+                    relevance = result.get('relevance_score', 0)
+                    ctx = result.get('context', '')
+                    
+                    context += f"\n  - {entity_type} '{entity_name}' in {file_path} (relevance: {relevance:.2f})"
+                    if ctx:
+                        # Show first 200 chars of context
+                        context += f"\n    Context: {ctx[:200]}..."
+            
+            # ============================================================
+            # SOURCE 5: PROJECT CONTEXT - Metadata & dependencies
+            # ============================================================
+            if project_metadata:
+                context += "\n\n=== PROJECT CONTEXT (Metadata) ==="
+                context += f"\nProject: {project_metadata.get('project_name', 'unknown')}"
+                context += f"\nType: {project_metadata.get('project_type', 'unknown')}"
+                context += f"\nFiles: {project_metadata.get('total_files', 0)} ({project_metadata.get('total_lines', 0)} lines)"
+                
+                dependencies = project_metadata.get('dependencies', [])
+                if dependencies:
+                    context += f"\nDependencies ({len(dependencies)}): "
+                    dep_names = [f"{dep['name']}" for dep in dependencies[:10]]
+                    context += ', '.join(dep_names)
+                
+                file_types = project_metadata.get('file_types', {})
+                if file_types:
+                    context += f"\nFile types: {dict(list(file_types.items())[:5])}"
+            
+            # ============================================================
+            # BUILD INTELLIGENT PROMPT USING ALL SOURCES
+            # ============================================================
             
             # Build a more intelligent prompt based on whether question is provided
             if question:
                 # Specific question - focused analysis
-                task_instruction = f'Answer this specific question: {question}'
-                detail_instruction = "Focus your answer specifically on what the user asked about. If they asked about a file's contents and you have it under 'File Contents', describe what's actually in the file."
+                task_instruction = f'Answer this specific question: "{question}"'
+                detail_instruction = """You MUST provide a DETAILED, SPECIFIC answer using the data provided.
+
+You have access to 5 sources of truth:
+1. Git diffs - what changed
+2. Full file contents - COMPLETE code (use this to see ALL classes/methods/functions!)
+3. AST structure - detailed code structure with line numbers
+4. Semantic search - related code
+5. Project metadata - dependencies
+
+CRITICAL RULES FOR ANSWERING:
+- If asked about classes/methods/functions - list them ALL from AST analysis or full file contents
+- If asked about changes - cite specific diffs and line numbers
+- If asked "what did I do" - describe ACTUAL changes, not generic statements
+- NO vague responses like "you were building features" - be SPECIFIC
+- Use actual names, line numbers, and code snippets from the sources
+- If you can't find the info in the sources, say so explicitly
+
+EXAMPLE - BAD: "You were building new features in cart.py"
+EXAMPLE - GOOD: "The ShoppingCart class has these methods: add_item() (line 45), remove_item() (line 52), update_quantity() (line 60), get_total() (line 68), get_item_count() (line 72), clear() (line 76), and get_items() (line 79)"
+
+ALWAYS cite the SOURCE you used (AST, full file, diff, etc) when answering."""
             else:
                 # No question - analyze the session deeply
                 task_instruction = 'Summarize what was done and what remains, like a mentor talking to a colleague.'
                 detail_instruction = """Write naturally, like you're catching someone up on their work. NO markdown formatting, NO asterisks, NO structured headings.
 
 TONE: Casual, direct, conversational - like a senior dev checking in.
+
+You have comprehensive context from 5 sources:
+- Git diffs showing changes
+- Full file contents showing complete code
+- AST analysis showing code structure
+- Semantic search showing related code
+- Project metadata showing dependencies
+
+Use ALL sources to provide accurate, complete insights.
 
 EXAMPLES:
 
@@ -300,7 +432,7 @@ RULES:
 - State what was done + what remains (if TODOs exist)
 - No glorification, just facts"""
             
-            prompt = f"""You are Brainet, a direct and concise coding assistant. Use "You" to address the developer.
+            prompt = f"""You are Brainet, a direct and concise coding assistant with COMPREHENSIVE codebase knowledge. Use "You" to address the developer.
 
 {context}
 
@@ -309,16 +441,18 @@ RULES:
 {detail_instruction}
 
 CRITICAL RULES:
-- Maximum 3 sentences
+- Maximum 3 sentences (unless answering a complex question)
 - No glorification or hype
 - Just facts: what was done + what's next
 - List TODOs if present
 - Be professional but casual, like a colleague
+- USE ALL 5 SOURCES when answering - you have complete context now!
+- NEVER mention where the information came from (AST, files, search, etc.) - just state facts directly like you already know them
 
-WORD BANS: "laying groundwork", "paving the way", "enhancing capabilities", "fundamental", "revolutionary", "game-changing", "innovative", "groundbreaking", "likely", "probably", "may have", "might", "possibly"
+WORD BANS: "laying groundwork", "paving the way", "enhancing capabilities", "fundamental", "revolutionary", "game-changing", "innovative", "groundbreaking", "likely", "probably", "may have", "might", "possibly", "seen in", "as listed in", "according to", "from the", "in the full file", "based on", "found in", "mentioned in", "shown in"
 """
 
-            response = await self.ai_client.generate(prompt=prompt, max_tokens=200)
+            response = await self.ai_client.generate(prompt=prompt, max_tokens=300)  # Increased from 200 for richer answers
             return response.strip()
         except Exception:
             return self._fallback_why(capsule_data)

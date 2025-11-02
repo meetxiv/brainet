@@ -556,14 +556,14 @@ def history(limit: int):
             if len(ai_summary) > 120:
                 ai_summary = ai_summary[:117] + "..."
             
-            console.print(f"[bold yellow]{i}.[/bold yellow] [dim]{time_str}[/dim] - [cyan]{files_count} files[/cyan]")
-            console.print(f"   {ai_summary}")
+            console.print(f"[bold cyan]#{i:02d}[/bold cyan] [dim]{time_str}[/dim] - [cyan]{files_count} files[/cyan]")
+            console.print(f"    {ai_summary}")
             console.print()
             
         except Exception as e:
             console.print(f"[dim red]  Error reading {capsule_path.name}: {e}[/dim red]")
     
-    console.print(f"[dim]💡 Run [cyan]brainet ask[/cyan] to query your session with AI[/dim]\n")
+    console.print(f"[dim]💡 Use [cyan]brainet preview <index>[/cyan] to view a specific capsule[/dim]")
 
 @main.command()
 @click.argument('query', required=True)
@@ -1135,8 +1135,91 @@ def status():
     console.print(f"[dim]💡 Use [cyan]brainet pause[/cyan] to stop tracking[/dim]\n")
 
 @main.command()
-def preview():
-    """Preview what would be captured without saving."""
+@click.argument('index', required=False, type=int)
+def preview(index):
+    """Preview a capsule or what would be captured next.
+    
+    Usage:
+        brainet preview        # Preview what the NEXT capture will contain
+        brainet preview 3      # View capsule #3 as it was originally displayed
+    """
+    from pathlib import Path
+    import json
+    
+    if index is not None:
+        # View specific capsule by index
+        capsule_dir = Path.cwd() / ".brainet" / "capsules"
+        
+        if not capsule_dir.exists():
+            console.print("[yellow]No capsules found. Run [cyan]brainet capture[/cyan] first.[/yellow]")
+            return
+        
+        capsule_files = sorted(capsule_dir.glob("capsule_*.json"), reverse=True)
+        
+        if not capsule_files:
+            console.print("[yellow]No capsules found.[/yellow]")
+            return
+        
+        if index < 1 or index > len(capsule_files):
+            console.print(f"[red]Invalid index. Please use 1-{len(capsule_files)}[/red]")
+            return
+        
+        # Load the specified capsule
+        capsule_path = capsule_files[index - 1]
+        
+        try:
+            with open(capsule_path, 'r') as f:
+                data = json.load(f)
+            
+            # Display capsule in the same format as when it was captured
+            context = data.get("context", {})
+            metadata = data.get("metadata", {})
+            
+            # Get timestamp
+            timestamp = metadata.get("timestamp", "Unknown")
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                time_str = dt.strftime("%b %d, %Y at %H:%M:%S")
+            except:
+                time_str = timestamp
+            
+            # Get AI summary
+            ai_summary = context.get("ai_summary", "No summary available")
+            
+            # Get stats
+            file_diffs = context.get("file_diffs", [])
+            files_count = len(file_diffs)
+            todos_count = len(context.get("todos", []))
+            
+            console.print(f"\n[bold cyan]📦 Capsule #{index:02d}[/bold cyan]")
+            console.print(f"[dim]{time_str}[/dim]\n")
+            
+            console.print(Panel.fit(
+                ai_summary,
+                title="[bold]📸 Context Summary[/bold]",
+                border_style="cyan"
+            ))
+            
+            console.print(f"\n[bold]📊 Stats:[/bold]")
+            console.print(f"   • {files_count} files modified")
+            console.print(f"   • {todos_count} TODOs found")
+            
+            if file_diffs:
+                console.print(f"\n[bold]📁 Modified Files:[/bold]")
+                for i, fd in enumerate(file_diffs[:5], 1):
+                    console.print(f"   {i}. {fd.get('file_path', 'unknown')}")
+                if len(file_diffs) > 5:
+                    console.print(f"   ... and {len(file_diffs) - 5} more")
+            
+            console.print()
+            return
+            
+        except Exception as e:
+            console.print(f"[red]Error loading capsule: {e}[/red]")
+            return
+    
+    # No index provided - preview NEXT capture
     context_capture = _ensure_context_capture()
     if not context_capture:
         console.print("[yellow]⚠️  No active tracking session[/yellow]")
@@ -1224,6 +1307,13 @@ def ask(query):
     asyncio.run(_ask_async(query))
 
 async def _ask_async(query):
+    """Ask a question with PROACTIVE semantic search and all 5 sources.
+    
+    Now uses:
+    1. Semantic search to find relevant code BEFORE asking AI
+    2. All 5 sources from the captured context
+    3. Full file contents for mentioned files
+    """
     context = _ensure_context_capture()
     if not context:
         console.print("[yellow]No active tracking session[/yellow]")
@@ -1232,7 +1322,7 @@ async def _ask_async(query):
     # Try to get the most recent saved capsule for better context
     latest_capsule = context.get_latest_context()
     
-    # If no saved capsule, capture current state
+    # If no saved capsule, capture current state with ALL 5 SOURCES
     if not latest_capsule:
         capsule = context.capture_context()
     else:
@@ -1240,6 +1330,39 @@ async def _ask_async(query):
     
     query_text = " ".join(query)
     
+    # ============================================================
+    # PROACTIVE SEMANTIC SEARCH - Find relevant code before asking AI
+    # ============================================================
+    semantic_discoveries = []
+    try:
+        from .core.analysis.semantic_searcher import SemanticSearcher
+        from .core.analysis.ast_parser import ASTParser
+        from .core.analysis.file_scanner import FileScanner
+        
+        # Initialize dependencies for semantic searcher
+        ast_parser = ASTParser()
+        file_scanner = FileScanner(context.project_root)
+        searcher = SemanticSearcher(context.project_root, ast_parser, file_scanner)
+        
+        # Search for code related to the query
+        results = searcher.search(query_text, max_results=5)
+        for result in results:
+            semantic_discoveries.append({
+                'entity_name': result.entity_name,
+                'entity_type': result.entity_type,
+                'file_path': result.file_path,
+                'line_start': result.line_start,
+                'line_end': result.line_end,
+                'relevance_score': result.relevance_score,
+                'context': result.context
+            })
+    except Exception as e:
+        # Semantic search is optional, continue without it
+        console.print(f"[dim]Semantic search unavailable: {e}[/dim]")
+    
+    # ============================================================
+    # REACTIVE FILE LOADING - Load explicitly mentioned files
+    # ============================================================
     file_contents = {}
     import re
     file_mentions = re.findall(r'[\w/.-]+\.\w+', query_text)
@@ -1259,11 +1382,29 @@ async def _ask_async(query):
                     file_contents[filename] = content
                 except Exception:
                     pass
+    
+    # Also load files from semantic search results
+    for discovery in semantic_discoveries[:3]:  # Top 3 discoveries
+        file_path = context.project_root / discovery['file_path']
+        if file_path.exists() and discovery['file_path'] not in file_contents:
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                # Show relevant section based on line numbers
+                lines = content.split('\n')
+                start = max(0, discovery['line_start'] - 10)
+                end = min(len(lines), discovery['line_end'] + 10)
+                relevant_content = '\n'.join(lines[start:end])
+                file_contents[discovery['file_path']] = relevant_content
+            except Exception:
+                pass
 
     from .ai.session_summarizer import SessionSummarizer
     summarizer = SessionSummarizer(use_ai=True)
     
-    # Transform capsule to dict format with ONLY diff context (NO commit history)
+    # ============================================================
+    # BUILD COMPREHENSIVE CAPSULE DATA WITH ALL 5 SOURCES
+    # ============================================================
     capsule_data = {
         "git_info": {
             "current_branch": capsule.project.git_branch or "unknown",
@@ -1280,11 +1421,17 @@ async def _ask_async(query):
             {"file": t.file, "line": t.line, "text": t.text}
             for t in capsule.context.todos
         ],
-        # REMOVED: recent_commits - AI should only see diff context
-        "file_contents": file_contents  # Add file contents if mentioned
+        # Legacy file_contents (for backward compatibility)
+        "file_contents": file_contents,
+        
+        # NEW: All 5 sources from context capture
+        "full_file_contents": capsule.context.full_file_contents or {},
+        "ast_analysis": capsule.context.ast_analysis or {},
+        "semantic_results": semantic_discoveries,  # From proactive search
+        "project_metadata": capsule.context.project_metadata or {}
     }
     
-    with console.status("[bold cyan]Thinking...[/bold cyan]"):
+    with console.status("[bold cyan]Thinking with comprehensive context...[/bold cyan]"):
         try:
             answer = await summarizer.explain_why(capsule_data, query_text)
             console.print("\n[bold green]Answer:[/bold green]")

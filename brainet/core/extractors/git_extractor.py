@@ -8,6 +8,7 @@ including retrieving modified files, commit history, and repository metadata.
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict
+import re
 
 import git
 from git.repo import Repo
@@ -18,12 +19,13 @@ from ...storage.models.capsule import ModifiedFile, Commit
 class GitExtractor:
     """Extracts Git-related context from a repository."""
     
-    def __init__(self, repo_path: Path):
+    def __init__(self, repo_path: Path, ast_parser=None):
         """
         Initialize the Git extractor.
         
         Args:
             repo_path: Path to the Git repository
+            ast_parser: Optional ASTParser instance for smart diff chunking
             
         Raises:
             InvalidGitRepositoryError: If the path is not a valid Git repository
@@ -31,6 +33,7 @@ class GitExtractor:
         """
         self.repo_path = repo_path
         self.repo = Repo(repo_path)
+        self.ast_parser = ast_parser  # For smart diff extraction
     
     @property
     def branch_name(self) -> Optional[str]:
@@ -62,18 +65,32 @@ class GitExtractor:
         
         # Get staged changes (git diff --cached)
         try:
-            for item in self.repo.index.diff("HEAD"):
-                status = self._get_change_type(item)
-                path = item.a_path if item.a_path else item.b_path
-                if path not in seen_paths:
-                    modified_files.append(ModifiedFile(
-                        path=path,
-                        status=status,
-                        last_modified=self._get_file_last_modified(path)
-                    ))
-                    seen_paths.add(path)
-        except:
-            pass  # No HEAD yet (empty repo)
+            # Check if repo has commits
+            if self.repo.heads:
+                # Normal case: compare against HEAD
+                for item in self.repo.index.diff("HEAD"):
+                    status = self._get_change_type(item)
+                    path = item.a_path if item.a_path else item.b_path
+                    if path not in seen_paths:
+                        modified_files.append(ModifiedFile(
+                            path=path,
+                            status=status,
+                            last_modified=self._get_file_last_modified(path)
+                        ))
+                        seen_paths.add(path)
+            else:
+                # Fresh repo: get staged files from index
+                for path in self.repo.index.entries.keys():
+                    file_path = path[0]  # Entry key is (path, stage)
+                    if file_path not in seen_paths and not self._should_ignore_file(file_path):
+                        modified_files.append(ModifiedFile(
+                            path=file_path,
+                            status='added',
+                            last_modified=self._get_file_last_modified(file_path)
+                        ))
+                        seen_paths.add(file_path)
+        except Exception as e:
+            pass  # Fallback to other methods
         
         # Get unstaged changes (git diff)
         for item in self.repo.index.diff(None):
@@ -138,7 +155,10 @@ class GitExtractor:
     
     def get_file_diff(self, filepath: str, staged_only: bool = False) -> Optional[str]:
         """
-        Get the diff for a specific modified file.
+        Get the diff for a specific modified file with smart chunking.
+        
+        Uses AST parser (if available) to intelligently extract only changed
+        functions/classes instead of blind truncation.
         
         Args:
             filepath: Relative path to the file
@@ -162,20 +182,156 @@ class GitExtractor:
                     diff = self.repo.git.diff('HEAD', filepath)
             else:
                 # No commits yet - get diff for new repo
-                if not staged_only:
+                # Must use --cached to see staged files in new repo
+                diff = self.repo.git.diff('--cached', filepath)
+                
+                # If not staged and not staged_only, show unstaged
+                if not diff and not staged_only:
                     diff = self.repo.git.diff(filepath)
             
             if not diff and not staged_only:
-                # File might be untracked, show full content
+                # File might be untracked, show full content in proper diff format
                 full_path = self.repo_path / filepath
                 if full_path.exists() and filepath in self.repo.untracked_files:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-                    return f"+++ NEW FILE (untracked) +++\n{content[:2000]}"  # Limit to 2000 chars
+                    # Format as proper diff with + prefix for each line
+                    diff_lines = [f"+{line}" for line in content.split('\n')[:100]]  # Limit lines
+                    return f"+++ NEW FILE (untracked) +++\n" + '\n'.join(diff_lines)
             
-            return diff[:5000] if diff else None  # Limit diff size
+            # Smart diff extraction using AST (if available and it's a Python file)
+            if diff and self.ast_parser and filepath.endswith('.py'):
+                smart_diff = self._extract_smart_diff(diff, filepath)
+                if smart_diff:
+                    return smart_diff
+            
+            # Fallback to simple truncation
+            return diff[:5000] if diff else None
         except Exception as e:
             return None
+    
+    def _extract_smart_diff(self, diff: str, filepath: str) -> Optional[str]:
+        """
+        Extract diff intelligently using AST to show only changed functions/classes.
+        
+        This replaces blind 5000-char truncation with semantic extraction.
+        
+        Args:
+            diff: Raw git diff output
+            filepath: Path to the file
+            
+        Returns:
+            Smartly extracted diff showing full changed functions
+        """
+        try:
+            # Parse diff to find changed line numbers
+            changed_lines = self._parse_changed_lines_from_diff(diff)
+            if not changed_lines:
+                return diff[:5000]  # Fallback if parsing fails
+            
+            # Load file content and parse with AST
+            full_path = self.repo_path / filepath
+            if not full_path.exists():
+                return diff[:5000]
+            
+            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                file_content = f.read()
+            
+            # Parse file with AST to get structure
+            structure = self.ast_parser.parse_file(filepath, file_content)
+            if structure.get('error'):
+                return diff[:5000]  # Fallback if AST parsing fails
+            
+            # Find which functions/classes contain the changes
+            changed_entities = self.ast_parser.find_changed_entities(filepath, changed_lines)
+            
+            if not changed_entities:
+                return diff[:5000]  # No entities found, use fallback
+            
+            # Extract full code for changed entities
+            lines = file_content.split('\n')
+            extracted_parts = []
+            
+            extracted_parts.append(f"# Smart diff for {filepath}")
+            extracted_parts.append(f"# Changed lines: {changed_lines[:10]}")  # Show first 10
+            extracted_parts.append(f"# Affected {len(changed_entities)} code entity(ies)\n")
+            
+            for entity in changed_entities:
+                entity_type = entity['type']
+                entity_name = entity['name']
+                line_start = entity['line_start']
+                line_end = entity['line_end']
+                
+                # Add header
+                if entity_type == 'class':
+                    methods = entity.get('changed_methods', [])
+                    if methods:
+                        extracted_parts.append(f"\n### CLASS: {entity_name} (changed methods: {', '.join(methods)})")
+                    else:
+                        extracted_parts.append(f"\n### CLASS: {entity_name}")
+                else:
+                    extracted_parts.append(f"\n### FUNCTION: {entity_name}")
+                
+                extracted_parts.append(f"# Lines {line_start}-{line_end}\n")
+                
+                # Extract entity code with context (3 lines before/after)
+                context_start = max(0, line_start - 4)  # -1 for 0-indexing, -3 for context
+                context_end = min(len(lines), line_end + 3)
+                
+                entity_lines = lines[context_start:context_end]
+                
+                # Add line numbers and highlight changed lines
+                for i, line in enumerate(entity_lines, start=context_start + 1):
+                    if i in changed_lines:
+                        extracted_parts.append(f">>> {i:4d} | {line}")  # Highlight changed
+                    else:
+                        extracted_parts.append(f"    {i:4d} | {line}")
+                
+                extracted_parts.append("")  # Empty line between entities
+            
+            result = '\n'.join(extracted_parts)
+            
+            # If still too long, truncate but at least we tried
+            if len(result) > 8000:
+                result = result[:8000] + "\n\n... [Smart diff truncated - too large]"
+            
+            return result
+            
+        except Exception as e:
+            # If anything fails, fallback to simple truncation
+            return diff[:5000]
+    
+    def _parse_changed_lines_from_diff(self, diff: str) -> List[int]:
+        """
+        Parse git diff to extract line numbers that were changed.
+        
+        Args:
+            diff: Raw git diff output
+            
+        Returns:
+            List of line numbers that have changes (additions/modifications)
+        """
+        changed_lines = []
+        current_line = 0
+        
+        for line in diff.split('\n'):
+            # Look for hunk headers like: @@ -10,7 +10,8 @@
+            if line.startswith('@@'):
+                # Extract new file line number
+                match = re.search(r'\+(\d+)', line)
+                if match:
+                    current_line = int(match.group(1))
+                continue
+            
+            # Track additions and modifications (not deletions)
+            if line.startswith('+') and not line.startswith('+++'):
+                changed_lines.append(current_line)
+                current_line += 1
+            elif not line.startswith('-'):
+                # Context line (exists in both versions)
+                current_line += 1
+        
+        return changed_lines
     
     def get_staged_changes(self) -> List[Dict[str, str]]:
         """
@@ -199,7 +355,7 @@ class GitExtractor:
     def get_staged_files_with_diffs(self) -> List[Dict[str, str]]:
         """
         Get ONLY staged files with their diffs - for current session analysis.
-        This prevents historical noise and ensures AI only sees current work.
+        Uses smart diff extraction with AST for Python files.
         
         Returns:
             List of dicts with 'path', 'status', and 'diff'
@@ -211,13 +367,13 @@ class GitExtractor:
             for diff in diff_index:
                 file_path = diff.a_path or diff.b_path
                 
-                # Get diff for this staged file only
-                diff_content = self.repo.git.diff('--cached', 'HEAD', file_path)
+                # Get diff using smart extraction
+                diff_content = self.get_file_diff(file_path, staged_only=True)
                 
                 staged_files.append({
                     'path': file_path,
                     'status': self._get_change_type(diff),
-                    'diff': diff_content[:5000] if diff_content else ''  # Limit size
+                    'diff': diff_content if diff_content else ''
                 })
         except Exception as e:
             # No HEAD yet (empty repo) - try getting all staged files
@@ -228,10 +384,12 @@ class GitExtractor:
                     if full_path.exists():
                         with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
+                        # Format with proper + prefixes
+                        diff_lines = [f"+{line}" for line in content.split('\n')[:100]]
                         staged_files.append({
                             'path': file_path,
                             'status': 'added',
-                            'diff': f"+++ NEW FILE +++\n{content[:2000]}"
+                            'diff': f"+++ NEW FILE +++\n" + '\n'.join(diff_lines)
                         })
             except Exception:
                 pass
