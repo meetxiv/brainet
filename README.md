@@ -23,7 +23,6 @@ Brainet is an AI-powered development context tracker that automatically captures
 - **📦 SOURCE 5 - Project Metadata**: Dependencies, file types, and project structure
 
 **Critical Bugs Fixed:**
-- ✅ First captures no longer show "removed" instead of "added" (fresh repo support)
 - ✅ Ask command now provides specific, detailed answers with line numbers
 - ✅ Proper diff counting (additions/deletions) in all scenarios
 
@@ -31,7 +30,7 @@ Brainet is an AI-powered development context tracker that automatically captures
 - 🎨 Capsule indexing (#01, #02, #03 format)
 - 👁️ `brainet preview <index>` - View any historical capsule
 - 💬 Dramatically improved AI responses - specific method listings, accurate context
-- 🚫 No more internal mechanism exposure in answers
+
 
 ---
 
