@@ -345,8 +345,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 💬 Support
 
-- **Issues:** [GitHub Issues](https://github.com/meetjoshi/brainet/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/meetjoshi/brainet/discussions)
+- **Issues:** [GitHub Issues](https://github.com/meetxiv/brainet/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/meetxiv/brainet/discussions)
 - **Email:** meetxiv@gmail.com
 
 ---
