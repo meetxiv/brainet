@@ -1550,9 +1550,7 @@ def workspaces():
 @main.command()
 @click.argument('query', nargs=-1, required=True)
 @click.option('--all-projects', '-a', is_flag=True, help='Search across all projects')
-@click.option('--preview', '-p', 'auto_preview', is_flag=True, help='Preview first result immediately')
-@click.option('--interactive', '-i', is_flag=True, help='Select a capsule to preview interactively')
-def search(query, all_projects, auto_preview, interactive):
+def search(query, all_projects):
     """Search for sessions by content across projects."""
     query_text = " ".join(query).lower()
     
@@ -1649,41 +1647,23 @@ def search(query, all_projects, auto_preview, interactive):
         if len(results) > 20:
             console.print(f"[dim]... and {len(results) - 20} more results[/dim]\n")
         
-        # Handle preview/interactive modes
-        if auto_preview and results:
-            # Auto-preview first result
-            result = results[0]
-            console.print(f"\n[bold green]📦 Auto-previewing first result...[/bold green]\n")
-            os.chdir(result['project_path'])
-            ctx = click.get_current_context()
-            ctx.invoke(preview, index=result['index'])
-            return
-        
-        if interactive and results:
-            # Ask user which capsule to preview
-            console.print(f"[bold cyan]Select a capsule to preview (1-{min(len(results), 20)}) or 'q' to quit:[/bold cyan] ", end='')
-            try:
-                choice = input().strip()
-                if choice.lower() == 'q':
-                    return
-                choice_idx = int(choice) - 1
-                if 0 <= choice_idx < len(results):
-                    result = results[choice_idx]
-                    console.print(f"\n[bold green]📦 Previewing {result['project']} - Capsule #{result['index']:02d}...[/bold green]\n")
-                    os.chdir(result['project_path'])
-                    ctx = click.get_current_context()
-                    ctx.invoke(preview, index=result['index'])
-                else:
-                    console.print(f"[red]Invalid selection. Please choose 1-{min(len(results), 20)}[/red]")
-            except (ValueError, KeyboardInterrupt):
-                console.print("\n[yellow]Preview cancelled[/yellow]")
-            return
-        
-        # Show hints for manual preview
-        console.print(f"[dim]💡 Quick preview options:[/dim]")
-        console.print(f"[dim]   • [cyan]brainet search \"{query_text}\" --preview[/cyan] → Auto-preview first result[/dim]")
-        console.print(f"[dim]   • [cyan]brainet search \"{query_text}\" -i[/cyan] → Choose which to preview[/dim]")
-        console.print(f"[dim]   • [cyan]cd {results[0]['project_path']} && brainet preview {results[0]['index']}[/cyan] → Manual preview[/dim]\n")
+        # Always ask interactively
+        console.print(f"[bold cyan]Select a capsule to preview (1-{min(len(results), 20)}) or 'q' to quit:[/bold cyan] ", end='')
+        try:
+            choice = input().strip()
+            if choice.lower() == 'q':
+                return
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(results):
+                result = results[choice_idx]
+                console.print(f"\n[bold green]📦 Previewing {result['project']} - Capsule #{result['index']:02d}...[/bold green]\n")
+                os.chdir(result['project_path'])
+                ctx = click.get_current_context()
+                ctx.invoke(preview, index=result['index'])
+            else:
+                console.print(f"[red]Invalid selection. Please choose 1-{min(len(results), 20)}[/red]")
+        except (ValueError, KeyboardInterrupt):
+            console.print("\n[yellow]Preview cancelled[/yellow]")
     
     else:
         # Search current project only
@@ -1766,32 +1746,22 @@ def search(query, all_projects, auto_preview, interactive):
             
             console.print(f"  {result['summary']}\n")
         
-        # Handle preview/interactive for current project
-        if auto_preview and results:
-            console.print(f"\n[bold green]📦 Auto-previewing first result...[/bold green]\n")
-            ctx = click.get_current_context()
-            ctx.invoke(preview, index=results[0]['index'])
-            return
-        
-        if interactive and results:
-            console.print(f"[bold cyan]Select a capsule to preview (1-{len(results)}) or 'q' to quit:[/bold cyan] ", end='')
-            try:
-                choice = input().strip()
-                if choice.lower() == 'q':
-                    return
-                choice_idx = int(choice) - 1
-                if 0 <= choice_idx < len(results):
-                    result = results[choice_idx]
-                    console.print(f"\n[bold green]📦 Previewing Capsule #{result['index']:02d}...[/bold green]\n")
-                    ctx = click.get_current_context()
-                    ctx.invoke(preview, index=result['index'])
-                else:
-                    console.print(f"[red]Invalid selection. Please choose 1-{len(results)}[/red]")
-            except (ValueError, KeyboardInterrupt):
-                console.print("\n[yellow]Preview cancelled[/yellow]")
-            return
-        
-        console.print(f"[dim]💡 Quick options: [cyan]brainet search \"{query_text}\" --preview[/cyan] or [cyan]-i[/cyan] for interactive[/dim]\n")
+        # Always ask interactively
+        console.print(f"[bold cyan]Select a capsule to preview (1-{len(results)}) or 'q' to quit:[/bold cyan] ", end='')
+        try:
+            choice = input().strip()
+            if choice.lower() == 'q':
+                return
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(results):
+                result = results[choice_idx]
+                console.print(f"\n[bold green]📦 Previewing Capsule #{result['index']:02d}...[/bold green]\n")
+                ctx = click.get_current_context()
+                ctx.invoke(preview, index=result['index'])
+            else:
+                console.print(f"[red]Invalid selection. Please choose 1-{len(results)}[/red]")
+        except (ValueError, KeyboardInterrupt):
+            console.print("\n[yellow]Preview cancelled[/yellow]")
 
 
 @main.command()
