@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="brainet",
-    version="0.2.1",
+    version="0.2.2",
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     include_package_data=True,
     install_requires=requirements,
@@ -18,15 +18,15 @@ setup(
         ]
     },
     author="Meet Joshi",
-    author_email="meet@brainet.dev",
+    author_email="meetxiv@gmail.com",
     description="AI-powered development context tracker - never lose your train of thought",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/meetjoshi/brainet",
+    url="https://github.com/meetxiv/brainet",
     project_urls={
-        "Bug Reports": "https://github.com/meetjoshi/brainet/issues",
-        "Source": "https://github.com/meetjoshi/brainet",
-        "Documentation": "https://github.com/meetjoshi/brainet#readme",
+        "Bug Reports": "https://github.com/meetxiv/brainet/issues",
+        "Source": "https://github.com/meetxiv/brainet",
+        "Documentation": "https://github.com/meetxiv/brainet#readme",
     },
     classifiers=[
         "Development Status :: 4 - Beta",
