@@ -5,7 +5,9 @@
 Brainet is an AI-powered development context tracker that automatically captures what you're working on, why you're working on it, and what's next. Think of it as a second brain for your coding sessions.
 
 <p align="center">
-  <img src="https://img.shields.io/pypi/v/brainet" alt="PyPI">
+<a href="https://pypi.org/project/brainet/">
+  <img src="https://img.shields.io/pypi/v/brainet" alt="PyPI version">
+</a>
   <img src="https://img.shields.io/pypi/pyversions/brainet" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
 </p>
@@ -345,7 +347,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 - **Issues:** [GitHub Issues](https://github.com/meetjoshi/brainet/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/meetjoshi/brainet/discussions)
-- **Email:** meet@brainet.dev
+- **Email:** meetxiv@gmail.com
 
 ---
 
