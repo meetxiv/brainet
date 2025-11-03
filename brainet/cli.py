@@ -1563,24 +1563,45 @@ def search(query, all_projects):
             capsule_dir = brainet_dir / 'capsules'
             
             if capsule_dir.exists():
-                for capsule_file in capsule_dir.glob('*.json'):
+                # Get all capsules with timestamps for indexing
+                capsules = sorted(capsule_dir.glob('*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
+                
+                for idx, capsule_file in enumerate(capsules, 1):
                     try:
                         with open(capsule_file, 'r') as f:
                             capsule_data = json.load(f)
                             
-                            # Search in summary, files, commits, tags, and messages
-                            summary = capsule_data.get('context', {}).get('ai_summary', '').lower()
-                            files = str(capsule_data.get('context', {}).get('file_diffs', [])).lower()
-                            commits = str(capsule_data.get('context', {}).get('recent_commits', [])).lower()
-                            tags = ' '.join(capsule_data.get('metadata', {}).get('tags', [])).lower()
-                            message = capsule_data.get('metadata', {}).get('message', '').lower()
+                            # Search in different fields and track where we found it
+                            summary = capsule_data.get('context', {}).get('ai_summary', '')
+                            files = str(capsule_data.get('context', {}).get('file_diffs', []))
+                            commits = str(capsule_data.get('context', {}).get('recent_commits', []))
+                            tags_list = capsule_data.get('metadata', {}).get('tags', [])
+                            message = capsule_data.get('metadata', {}).get('custom_message', '') or ''
                             
-                            if query_text in summary or query_text in files or query_text in commits or query_text in tags or query_text in message:
+                            # Track where matches were found
+                            found_in = []
+                            if query_text in summary.lower():
+                                found_in.append('summary')
+                            if query_text in files.lower():
+                                found_in.append('files')
+                            if query_text in commits.lower():
+                                found_in.append('commits')
+                            if any(query_text in tag.lower() for tag in tags_list):
+                                found_in.append('tags')
+                            if query_text in message.lower():
+                                found_in.append('message')
+                            
+                            if found_in:
                                 results.append({
+                                    'index': idx,
                                     'project': project['project'],
+                                    'project_path': project['path'],
                                     'timestamp': capsule_data.get('metadata', {}).get('timestamp', ''),
-                                    'summary': capsule_data.get('context', {}).get('ai_summary', 'No summary'),
-                                    'path': project['path']
+                                    'summary': summary,
+                                    'found_in': found_in,
+                                    'tags': tags_list,
+                                    'message': message,
+                                    'file_count': len(capsule_data.get('context', {}).get('file_diffs', []))
                                 })
                     except Exception:
                         pass
@@ -1591,13 +1612,44 @@ def search(query, all_projects):
         
         console.print(f"\n[bold cyan]🔍 Search Results for '{query_text}' ({len(results)} found):[/bold cyan]\n")
         
-        for result in results[:20]:  # Limit to 20 results
-            console.print(f"[bold green]●[/bold green] [cyan]{result['project']}[/cyan] [dim]({result['timestamp']})[/dim]")
-            console.print(f"  {result['summary'][:100]}...")
-            console.print(f"  [dim]{result['path']}[/dim]\n")
+        # Display results with index and match location
+        for i, result in enumerate(results[:20], 1):
+            # Format match location
+            match_badges = []
+            for loc in result['found_in']:
+                if loc == 'tags':
+                    match_badges.append('[yellow]🏷️  tag[/yellow]')
+                elif loc == 'message':
+                    match_badges.append('[blue]💬 message[/blue]')
+                elif loc == 'summary':
+                    match_badges.append('[green]📝 summary[/green]')
+                elif loc == 'files':
+                    match_badges.append('[cyan]📄 files[/cyan]')
+                elif loc == 'commits':
+                    match_badges.append('[magenta]📌 commits[/magenta]')
+            
+            match_str = ' '.join(match_badges)
+            
+            # Display result
+            console.print(f"[bold white]{i}.[/bold white] [cyan]{result['project']}[/cyan] [dim]- Capsule #{result['index']:02d}[/dim]")
+            console.print(f"   {match_str}")
+            console.print(f"   [dim]{result['timestamp'][:19]} • {result['file_count']} file(s)[/dim]")
+            
+            if result['tags']:
+                console.print(f"   [dim]Tags: {', '.join(result['tags'])}[/dim]")
+            if result['message']:
+                console.print(f"   [dim]Note: {result['message']}[/dim]")
+            
+            console.print(f"   {result['summary'][:100]}{'...' if len(result['summary']) > 100 else ''}")
+            console.print()
         
         if len(results) > 20:
             console.print(f"[dim]... and {len(results) - 20} more results[/dim]\n")
+        
+        # Interactive preview option
+        console.print(f"[dim]💡 To preview a capsule:[/dim]")
+        console.print(f"[dim]   • cd <project-path> && brainet preview <index>[/dim]")
+        console.print(f"[dim]   • Example: cd {results[0]['project_path']} && brainet preview {results[0]['index']}[/dim]\n")
     
     else:
         # Search current project only
@@ -1608,22 +1660,41 @@ def search(query, all_projects):
             console.print("[yellow]No capsules found in current project.[/yellow]")
             return
         
+        # Get all capsules sorted by time
+        capsules = sorted(capsule_dir.glob('*.json'), key=lambda x: x.stat().st_mtime, reverse=True)
         results = []
-        for capsule_file in capsule_dir.glob('*.json'):
+        
+        for idx, capsule_file in enumerate(capsules, 1):
             try:
                 with open(capsule_file, 'r') as f:
                     capsule_data = json.load(f)
                     
-                    summary = capsule_data.get('context', {}).get('ai_summary', '').lower()
-                    files = str(capsule_data.get('context', {}).get('file_diffs', [])).lower()
-                    tags = ' '.join(capsule_data.get('metadata', {}).get('tags', [])).lower()
-                    message = capsule_data.get('metadata', {}).get('message', '').lower()
+                    # Search in different fields
+                    summary = capsule_data.get('context', {}).get('ai_summary', '')
+                    files = str(capsule_data.get('context', {}).get('file_diffs', []))
+                    tags_list = capsule_data.get('metadata', {}).get('tags', [])
+                    message = capsule_data.get('metadata', {}).get('custom_message', '') or ''
                     
-                    if query_text in summary or query_text in files or query_text in tags or query_text in message:
+                    # Track where matches were found
+                    found_in = []
+                    if query_text in summary.lower():
+                        found_in.append('summary')
+                    if query_text in files.lower():
+                        found_in.append('files')
+                    if any(query_text in tag.lower() for tag in tags_list):
+                        found_in.append('tags')
+                    if query_text in message.lower():
+                        found_in.append('message')
+                    
+                    if found_in:
                         results.append({
+                            'index': idx,
                             'timestamp': capsule_data.get('metadata', {}).get('timestamp', ''),
-                            'summary': capsule_data.get('context', {}).get('ai_summary', 'No summary'),
-                            'files': len(capsule_data.get('context', {}).get('file_diffs', []))
+                            'summary': summary,
+                            'found_in': found_in,
+                            'tags': tags_list,
+                            'message': message,
+                            'file_count': len(capsule_data.get('context', {}).get('file_diffs', []))
                         })
             except Exception:
                 pass
@@ -1633,11 +1704,35 @@ def search(query, all_projects):
             console.print("[dim]💡 Use --all-projects to search across all projects[/dim]")
             return
         
-        console.print(f"\n[bold cyan]🔍 Found {len(results)} sessions matching '{query_text}':[/bold cyan]\n")
+        console.print(f"\n[bold cyan]🔍 Found {len(results)} capsule(s) matching '{query_text}':[/bold cyan]\n")
         
         for result in results:
-            console.print(f"[bold green]●[/bold green] [dim]{result['timestamp']}[/dim] - {result['files']} files")
+            # Format match location
+            match_badges = []
+            for loc in result['found_in']:
+                if loc == 'tags':
+                    match_badges.append('[yellow]🏷️  tag[/yellow]')
+                elif loc == 'message':
+                    match_badges.append('[blue]💬 message[/blue]')
+                elif loc == 'summary':
+                    match_badges.append('[green]📝 summary[/green]')
+                elif loc == 'files':
+                    match_badges.append('[cyan]📄 files[/cyan]')
+            
+            match_str = ' '.join(match_badges)
+            
+            console.print(f"[bold white]Capsule #{result['index']:02d}[/bold white]")
+            console.print(f"  {match_str}")
+            console.print(f"  [dim]{result['timestamp'][:19]} • {result['file_count']} file(s)[/dim]")
+            
+            if result['tags']:
+                console.print(f"  [dim]Tags: {', '.join(result['tags'])}[/dim]")
+            if result['message']:
+                console.print(f"  [dim]Note: {result['message']}[/dim]")
+            
             console.print(f"  {result['summary']}\n")
+        
+        console.print(f"[dim]💡 Use [cyan]brainet preview <index>[/cyan] to view full details[/dim]\n")
 
 
 @main.command()
