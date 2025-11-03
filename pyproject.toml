@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainet"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI-powered development context tracker - never lose your train of thought"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Meet Joshi", email = "meet@brainet.dev"}
+    {name = "Meet Joshi", email = "meetxiv@gmail.com"}
 ]
 keywords = ["ai", "development", "context", "git", "productivity", "claude", "groq", "llm", "developer-tools", "cli"]
 classifiers = [
@@ -39,10 +39,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/meetjoshi/brainet"
-Documentation = "https://github.com/meetjoshi/brainet#readme"
-Repository = "https://github.com/meetjoshi/brainet"
-"Bug Reports" = "https://github.com/meetjoshi/brainet/issues"
+Homepage = "https://github.com/meetxiv/brainet"
+Documentation = "https://github.com/meetxiv/brainet#readme"
+Repository = "https://github.com/meetxiv/brainet"
+"Bug Reports" = "https://github.com/meetxiv/brainet/issues"
 
 [project.scripts]
 brainet = "brainet.cli:main"

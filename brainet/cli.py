@@ -1710,10 +1710,10 @@ def cleanup(days, dry_run):
         return
     
     if dry_run:
-        console.print(f"\n[yellow]🔍 Dry Run - Would remove {total_capsules} capsules from {len(projects_to_clean)} projects:[/yellow]\n")
+        console.print(f"\n[yellow]🔍 Dry Run - Would remove {total_capsules} capsules older than {days} days from {len(projects_to_clean)} projects:[/yellow]\n")
         for proj in projects_to_clean:
             console.print(f"  [cyan]●[/cyan] {proj['project']}: {len(proj['capsules'])} capsules")
-        console.print(f"\n[dim]Run without --dry-run to actually delete[/dim]\n")
+        console.print(f"\n[dim]Run 'brainet cleanup --days {days}' to actually delete[/dim]\n")
     else:
         console.print(f"\n[yellow]🗑️  Removing {total_capsules} old capsules from {len(projects_to_clean)} projects...[/yellow]\n")
         
