@@ -1568,12 +1568,14 @@ def search(query, all_projects):
                         with open(capsule_file, 'r') as f:
                             capsule_data = json.load(f)
                             
-                            # Search in summary, files, commits
+                            # Search in summary, files, commits, tags, and messages
                             summary = capsule_data.get('context', {}).get('ai_summary', '').lower()
                             files = str(capsule_data.get('context', {}).get('file_diffs', [])).lower()
                             commits = str(capsule_data.get('context', {}).get('recent_commits', [])).lower()
+                            tags = ' '.join(capsule_data.get('metadata', {}).get('tags', [])).lower()
+                            message = capsule_data.get('metadata', {}).get('message', '').lower()
                             
-                            if query_text in summary or query_text in files or query_text in commits:
+                            if query_text in summary or query_text in files or query_text in commits or query_text in tags or query_text in message:
                                 results.append({
                                     'project': project['project'],
                                     'timestamp': capsule_data.get('metadata', {}).get('timestamp', ''),
@@ -1614,8 +1616,10 @@ def search(query, all_projects):
                     
                     summary = capsule_data.get('context', {}).get('ai_summary', '').lower()
                     files = str(capsule_data.get('context', {}).get('file_diffs', [])).lower()
+                    tags = ' '.join(capsule_data.get('metadata', {}).get('tags', [])).lower()
+                    message = capsule_data.get('metadata', {}).get('message', '').lower()
                     
-                    if query_text in summary or query_text in files:
+                    if query_text in summary or query_text in files or query_text in tags or query_text in message:
                         results.append({
                             'timestamp': capsule_data.get('metadata', {}).get('timestamp', ''),
                             'summary': capsule_data.get('context', {}).get('ai_summary', 'No summary'),
