@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="brainet",
-    version="0.2.2",
+    version="0.2.3",
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     include_package_data=True,
     install_requires=requirements,

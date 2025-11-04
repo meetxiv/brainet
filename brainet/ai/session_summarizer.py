@@ -327,7 +327,16 @@ Return ONLY a list with "-" prefix, like:
                     
                     imports = ast_data.get('imports', [])
                     if imports:
-                        context += f"\n  Imports: {', '.join(imports[:10])}"
+                        # Imports are dict objects with 'module' and 'name' keys
+                        import_names = []
+                        for imp in imports[:10]:
+                            if isinstance(imp, dict):
+                                module = imp.get('module', '')
+                                name = imp.get('name', '')
+                                import_names.append(f"{module}.{name}" if module and name else module or name)
+                            else:
+                                import_names.append(str(imp))
+                        context += f"\n  Imports: {', '.join(import_names)}"
             
             # ============================================================
             # SOURCE 4: SEMANTIC SEARCH - Related code discovery
@@ -454,7 +463,8 @@ WORD BANS: "laying groundwork", "paving the way", "enhancing capabilities", "fun
 
             response = await self.ai_client.generate(prompt=prompt, max_tokens=300)  # Increased from 200 for richer answers
             return response.strip()
-        except Exception:
+        except Exception as e:
+            # Log error for debugging but return fallback
             return self._fallback_why(capsule_data)
     
     def _fallback_why(self, capsule_data: Dict) -> str:
